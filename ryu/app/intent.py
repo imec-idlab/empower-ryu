@@ -54,6 +54,14 @@ class LSwitch:
         self._ofproto_parser = self._dp.ofproto_parser
         self._hosts = {}
 
+        conf = cfg.CONF
+        conf.register_opts([
+            cfg.BoolOpt('keep_of_rules_flag',
+                        default=True,
+                        help=('The flag to keep or remove old rules from WTPs'))
+        ])
+        self._keep_of_rules_flag = conf.keep_of_rules_flag
+
     def get_dp(self):
         return self._dp
 
@@ -63,7 +71,7 @@ class LSwitch:
     # update or learn a new host
     def update_host(self, mac, port):
 
-        if mac in self._hosts and self._hosts[mac] != port:
+        if mac in self._hosts and self._hosts[mac] != port and not self._keep_of_rules_flag:
             self.delete_host_rules(mac)
 
         self._hosts[mac] = port
@@ -201,7 +209,11 @@ class Intent(app_manager.RyuApp):
                        help=('The Empower Runtime controller ip')),
             cfg.IntOpt('empower_port',
                        default=4444,
-                       help=('The Empower Runtime controller port'))])
+                       help=('The Empower Runtime controller port')),
+            cfg.BoolOpt('keep_of_rules_flag',
+                       default=True,
+                       help=('The flag to keep or remove old rules from WTPs'))
+        ])
 
         self.endpoints = {}
         self.rules = {}
@@ -209,6 +221,7 @@ class Intent(app_manager.RyuApp):
         self.LSwitches = {}
         self.mutex = Lock()
         self._vlan_id = 1000
+        self._keep_of_rules_flag = conf.keep_of_rules_flag
 
         self.agent = start_agent(conf.empower_ip, conf.empower_port, 2, self)
 
@@ -339,7 +352,8 @@ class Intent(app_manager.RyuApp):
 
                 for hwaddr in port.dont_learn:
 
-                    switch.delete_host_rules(hwaddr)
+                    if not self._keep_of_rules_flag:
+                        switch.delete_host_rules(hwaddr)
                     switch.delete_host(hwaddr)
 
     def _find_host_dpid(self, mac):
